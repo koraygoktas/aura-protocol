@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA Protocol - ZK-Verified Lending</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            color: #ffffff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .wallet-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .connect-btn {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .connect-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .wallet-address {
+            font-family: monospace;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #a0aec0;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.9rem;
+            color: #718096;
+        }
+
+        .health-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .health-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .health-healthy { background: #48bb78; }
+        .health-warning { background: #ed8936; }
+        .health-danger { background: #f56565; }
+
+        .main-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tab {
+            padding: 1rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: #a0aec0;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            color: #ffffff;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #a0aec0;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: #718096;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .info-box {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #667eea;
+        }
+
+        .info-text {
+            font-size: 0.9rem;
+            color: #a0aec0;
+        }
+
+        .risk-score-display {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .risk-score-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .risk-tier {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .tier-1 { background: rgba(72, 187, 120, 0.2); color: #48bb78; }
+        .tier-2 { background: rgba(72, 187, 120, 0.15); color: #68d391; }
+        .tier-3 { background: rgba(237, 137, 54, 0.2); color: #ed8936; }
+        .tier-4 { background: rgba(245, 101, 101, 0.2); color: #f56565; }
+
+        .ltv-display {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.success {
+            background: rgba(72, 187, 120, 0.9);
+            color: white;
+        }
+
+        .notification.error {
+            background: rgba(245, 101, 101, 0.9);
+            color: white;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .balance-display {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-top: 0.25rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">AURA Protocol</div>
+            <div class="wallet-section">
+                <div id="walletAddress" class="wallet-address hidden"></div>
+                <button id="connectBtn" class="connect-btn">Connect Wallet</button>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-title">Total Collateral</div>
+                <div class="card-value" id="totalCollateral">0.00</div>
+                <div class="card-subtitle">COLL Token</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Total Debt</div>
+                <div class="card-value" id="totalDebt">0.00</div>
+                <div class="card-subtitle">DEBT Token</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Health Factor</div>
+                <div class="health-indicator">
+                    <div id="healthDot" class="health-dot health-healthy"></div>
+                    <div class="card-value" id="healthFactor">-</div>
+                </div>
+                <div class="card-subtitle" id="healthStatus">Healthy</div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Risk Score</div>
+                <div class="card-value" id="riskScore">-</div>
+                <div class="card-subtitle">ZK Verified</div>
+            </div>
+        </div>
+
+        <div class="main-panel">
+            <div class="tabs">
+                <button class="tab active" data-tab="deposit">Deposit</button>
+                <button class="tab" data-tab="borrow">Borrow</button>
+                <button class="tab" data-tab="repay">Repay</button>
+                <button class="tab" data-tab="withdraw">Withdraw</button>
+            </div>
+
+            <div id="deposit" class="tab-content active">
+                <div class="form-group">
+                    <label class="form-label">Amount to Deposit</label>
+                    <input type="number" id="depositAmount" class="form-input" placeholder="0.00">
+                    <div class="balance-display">Balance: <span id="collateralBalance">0.00</span> COLL</div>
+                </div>
+                <button id="depositBtn" class="action-btn">Deposit Collateral</button>
+            </div>
+
+            <div id="borrow" class="tab-content">
+                <div class="info-box">
+                    <div class="info-title">ZK Risk Verification</div>
+                    <div class="info-text">Your borrowing limit is determined by your on-chain risk score calculated through ZK-proof verification.</div>
+                </div>
+
+                <div class="risk-score-display">
+                    <div>
+                        <div class="form-label">Your Risk Score</div>
+                        <div class="risk-score-value" id="borrowRiskScore">-</div>
+                    </div>
+                    <div id="riskTier" class="risk-tier tier-1 hidden">Tier 1</div>
+                </div>
+
+                <div class="ltv-display">
+                    <span class="form-label">Your LTV: <span id="userLTV">90%</span></span>
+                    <span class="form-label">Max Borrow: <span id="maxBorrow">0.00</span> DEBT</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Amount to Borrow</label>
+                    <input type="number" id="borrowAmount" class="form-input" placeholder="0.00">
+                </div>
+
+                <button id="generateProofBtn" class="action-btn" style="margin-bottom: 1rem;">
+                    Generate ZK Proof
+                </button>
+                <button id="borrowBtn" class="action-btn" disabled>Borrow with ZK Verification</button>
+            </div>
+
+            <div id="repay" class="tab-content">
+                <div class="form-group">
+                    <label class="form-label">Amount to Repay</label>
+                    <input type="number" id="repayAmount" class="form-input" placeholder="0.00">
+                    <div class="balance-display">Debt: <span id="debtBalance">0.00</span> DEBT</div>
+                </div>
+                <button id="repayBtn" class="action-btn">Repay Debt</button>
+            </div>
+
+            <div id="withdraw" class="tab-content">
+                <div class="form-group">
+                    <label class="form-label">Amount to Withdraw</label>
+                    <input type="number" id="withdrawAmount" class="form-input" placeholder="0.00">
+                    <div class="balance-display">Collateral: <span id="withdrawableCollateral">0.00</span> COLL</div>
+                </div>
+                <button id="withdrawBtn" class="action-btn">Withdraw Collateral</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+    <script>
+        // Contract addresses (replace with actual deployed addresses)
+        const CONTRACT_ADDRESSES = {
+            collateralToken: '0x...',
+            debtToken: '0x...',
+            engine: '0x...',
+            verifier: '0x...'
+        };
+
+        // Contract ABIs (simplified for demo)
+        const ERC20_ABI = [
+            { "constant": true, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function" },
+            { "constant": false, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function" },
+            { "constant": false, "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "transfer", "outputs": [{"name": "", "type": "bool"}], "type": "function" }
+        ];
+
+        const ENGINE_ABI = [
+            { "constant": true, "inputs": [{"name": "user", "type": "address"}], "name": "getPositionDetails", "outputs": [{"name": "collateralAmount", "type": "uint256"}, {"name": "debtAmount", "type": "uint256"}, {"name": "riskScore", "type": "uint256"}, {"name": "healthFactor", "type": "uint256"}, {"name": "maxBorrow", "type": "uint256"}], "type": "function" },
+            { "constant": true, "inputs": [{"name": "riskScore", "type": "uint256"}], "name": "getDynamicLTV", "outputs": [{"name": "", "type": "uint256"}], "type": "function" },
+            { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}], "name": "deposit", "outputs": [], "type": "function" },
+            { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}, {"name": "proof", "type": "bytes"}, {"name": "publicInputs", "type": "uint256[]"}], "name": "borrowWithZK", "outputs": [], "type": "function" },
+            { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}], "name": "repay", "outputs": [], "type": "function" },
+            { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}], "name": "withdraw", "outputs": [], "type": "function" }
+        ];
+
+        // State
+        let web3;
+        let userAddress;
+        let contracts = {};
+        let currentPosition = {
+            collateralAmount: 0,
+            debtAmount: 0,
+            riskScore: 0,
+            healthFactor: 0,
+            maxBorrow: 0
+        };
+        let generatedProof = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeEventListeners();
+            checkWalletConnection();
+        });
+
+        function initializeEventListeners() {
+            // Wallet connection
+            document.getElementById('connectBtn').addEventListener('click', connectWallet);
+
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', switchTab);
+            });
+
+            // Action buttons
+            document.getElementById('depositBtn').addEventListener('click', deposit);
+            document.getElementById('generateProofBtn').addEventListener('click', generateZKProof);
+            document.getElementById('borrowBtn').addEventListener('click', borrow);
+            document.getElementById('repayBtn').addEventListener('click', repay);
+            document.getElementById('withdrawBtn').addEventListener('click', withdraw);
+        }
+
+        async function checkWalletConnection() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts.length > 0) {
+                        userAddress = accounts[0];
+                        web3 = new Web3(window.ethereum);
+                        updateWalletUI();
+                        initializeContracts();
+                        loadPositionData();
+                    }
+                } catch (error) {
+                    console.error('Error checking wallet connection:', error);
+                }
+            }
+        }
+
+        async function connectWallet() {
+            if (typeof window.ethereum === 'undefined') {
+                showNotification('Please install MetaMask to use this application', 'error');
+                return;
+            }
+
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAddress = accounts[0];
+                web3 = new Web3(window.ethereum);
+                
+                updateWalletUI();
+                initializeContracts();
+                loadPositionData();
+                
+                showNotification('Wallet connected successfully!', 'success');
+            } catch (error) {
+                console.error('Error connecting wallet:', error);
+                showNotification('Failed to connect wallet', 'error');
+            }
+        }
+
+        function updateWalletUI() {
+            const connectBtn = document.getElementById('connectBtn');
+            const walletAddress = document.getElementById('walletAddress');
+            
+            connectBtn.classList.add('hidden');
+            walletAddress.classList.remove('hidden');
+            walletAddress.textContent = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+        }
+
+        function initializeContracts() {
+            // In production, use actual contract addresses
+            // For demo, we'll use mock implementations
+            contracts.collateralToken = new web3.eth.Contract(ERC20_ABI, CONTRACT_ADDRESSES.collateralToken);
+            contracts.debtToken = new web3.eth.Contract(ERC20_ABI, CONTRACT_ADDRESSES.debtToken);
+            contracts.engine = new web3.eth.Contract(ENGINE_ABI, CONTRACT_ADDRESSES.engine);
+        }
+
+        async function loadPositionData() {
+            try {
+                // In production, call actual contract
+                // For demo, use mock data
+                currentPosition = {
+                    collateralAmount: web3.utils.toWei('100', 'ether'),
+                    debtAmount: web3.utils.toWei('50', 'ether'),
+                    riskScore: 25,
+                    healthFactor: web3.utils.toWei('1.5', 'ether'),
+                    maxBorrow: web3.utils.toWei('90', 'ether')
+                };
+
+                updateDashboard();
+                updateBalances();
+            } catch (error) {
+                console.error('Error loading position data:', error);
+            }
+        }
+
+        function updateDashboard() {
+            // Update collateral display
+            const collateralValue = parseFloat(web3.utils.fromWei(currentPosition.collateralAmount, 'ether'));
+            document.getElementById('totalCollateral').textContent = collateralValue.toFixed(2);
+
+            // Update debt display
+            const debtValue = parseFloat(web3.utils.fromWei(currentPosition.debtAmount, 'ether'));
+            document.getElementById('totalDebt').textContent = debtValue.toFixed(2);
+
+            // Update health factor
+            const healthFactor = parseFloat(web3.utils.fromWei(currentPosition.healthFactor, 'ether'));
+            document.getElementById('healthFactor').textContent = healthFactor.toFixed(2);
+            updateHealthIndicator(healthFactor);
+
+            // Update risk score
+            document.getElementById('riskScore').textContent = currentPosition.riskScore;
+            document.getElementById('borrowRiskScore').textContent = currentPosition.riskScore;
+
+            // Update risk tier
+            updateRiskTier(currentPosition.riskScore);
+
+            // Update LTV
+            const ltv = getDynamicLTV(currentPosition.riskScore);
+            document.getElementById('userLTV').textContent = `${ltv}%`;
+
+            // Update max borrow
+            const maxBorrowValue = parseFloat(web3.utils.fromWei(currentPosition.maxBorrow, 'ether'));
+            document.getElementById('maxBorrow').textContent = maxBorrowValue.toFixed(2);
+        }
+
+        function updateHealthIndicator(healthFactor) {
+            const healthDot = document.getElementById('healthDot');
+            const healthStatus = document.getElementById('healthStatus');
+
+            healthDot.className = 'health-dot';
+            
+            if (healthFactor >= 1.5) {
+                healthDot.classList.add('health-healthy');
+                healthStatus.textContent = 'Very Healthy';
+            } else if (healthFactor >= 1.2) {
+                healthDot.classList.add('health-healthy');
+                healthStatus.textContent = 'Healthy';
+            } else if (healthFactor >= 1.0) {
+                healthDot.classList.add('health-warning');
+                healthStatus.textContent = 'Moderate Risk';
+            } else {
+                healthDot.classList.add('health-danger');
+                healthStatus.textContent = 'High Risk';
+            }
+        }
+
+        function updateRiskTier(riskScore) {
+            const riskTier = document.getElementById('riskTier');
+            riskTier.classList.remove('hidden', 'tier-1', 'tier-2', 'tier-3', 'tier-4');
+
+            if (riskScore <= 25) {
+                riskTier.classList.add('tier-1');
+                riskTier.textContent = 'Tier 1';
+            } else if (riskScore <= 50) {
+                riskTier.classList.add('tier-2');
+                riskTier.textContent = 'Tier 2';
+            } else if (riskScore <= 75) {
+                riskTier.classList.add('tier-3');
+                riskTier.textContent = 'Tier 3';
+            } else {
+                riskTier.classList.add('tier-4');
+                riskTier.textContent = 'Tier 4';
+            }
+        }
+
+        function getDynamicLTV(riskScore) {
+            if (riskScore <= 25) return 90;
+            if (riskScore <= 50) return 75;
+            if (riskScore <= 75) return 60;
+            return 45;
+        }
+
+        async function updateBalances() {
+            try {
+                // In production, fetch actual balances from contracts
+                // For demo, use mock data
+                document.getElementById('collateralBalance').textContent = '1000.00';
+                document.getElementById('debtBalance').textContent = parseFloat(web3.utils.fromWei(currentPosition.debtAmount, 'ether')).toFixed(2);
+                document.getElementById('withdrawableCollateral').textContent = parseFloat(web3.utils.fromWei(currentPosition.collateralAmount, 'ether')).toFixed(2);
+            } catch (error) {
+                console.error('Error updating balances:', error);
+            }
+        }
+
+        function switchTab(e) {
+            const tabId = e.target.dataset.tab;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            e.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        async function deposit() {
+            if (!userAddress) {
+                showNotification('Please connect your wallet first', 'error');
+                return;
+            }
+
+            const amount = document.getElementById('depositAmount').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showNotification('Please enter a valid amount', 'error');
+                return;
+            }
+
+            try {
+                const amountWei = web3.utils.toWei(amount, 'ether');
+                
+                // In production, call actual contract
+                // await contracts.collateralToken.methods.approve(CONTRACT_ADDRESSES.engine, amountWei).send({ from: userAddress });
+                // await contracts.engine.methods.deposit(amountWei).send({ from: userAddress });
+
+                // Mock transaction
+                currentPosition.collateralAmount = web3.utils.toBN(currentPosition.collateralAmount).add(web3.utils.toBN(amountWei)).toString();
+                
+                showNotification('Deposit successful!', 'success');
+                updateDashboard();
+                updateBalances();
+                
+                document.getElementById('depositAmount').value = '';
+            } catch (error) {
+                console.error('Error depositing:', error);
+                showNotification('Deposit failed', 'error');
+            }
+        }
+
+        async function generateZKProof() {
+            if (!userAddress) {
+                showNotification('Please connect your wallet first', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('generateProofBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Generating Proof...';
+
+            try {
+                // In production, call actual ZK proof generation service
+                // For demo, simulate the process
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // Mock proof generation
+                generatedProof = {
+                    proof: web3.utils.randomHex(32),
+                    publicInputs: [
+                        web3.utils.toBN(userAddress).toString(),
+                        currentPosition.riskScore
+                    ]
+                };
+
+                document.getElementById('borrowBtn').disabled = false;
+                showNotification('ZK proof generated successfully!', 'success');
+            } catch (error) {
+                console.error('Error generating proof:', error);
+                showNotification('Proof generation failed', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Generate ZK Proof';
+            }
+        }
+
+        async function borrow() {
+            if (!userAddress) {
+                showNotification('Please connect your wallet first', 'error');
+                return;
+            }
+
+            if (!generatedProof) {
+                showNotification('Please generate ZK proof first', 'error');
+                return;
+            }
+
+            const amount = document.getElementById('borrowAmount').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showNotification('Please enter a valid amount', 'error');
+                return;
+            }
+
+            try {
+                const amountWei = web3.utils.toWei(amount, 'ether');
+                const maxBorrow = parseFloat(web3.utils.fromWei(currentPosition.maxBorrow, 'ether'));
+                
+                if (parseFloat(amount) > maxBorrow) {
+                    showNotification(`Amount exceeds maximum borrowable (${maxBorrow.toFixed(2)} DEBT)`, 'error');
+                    return;
+                }
+
+                // In production, call actual contract
+                // await contracts.engine.methods.borrowWithZK(
+                //     amountWei,
+                //     generatedProof.proof,
+                //     generatedProof.publicInputs
+                // ).send({ from: userAddress });
+
+                // Mock transaction
+                currentPosition.debtAmount = web3.utils.toBN(currentPosition.debtAmount).add(web3.utils.toBN(amountWei)).toString();
+                
+                showNotification('Borrow successful!', 'success');
+                updateDashboard();
+                updateBalances();
+                
+                document.getElementById('borrowAmount').value = '';
+                generatedProof = null;
+                document.getElementById('borrowBtn').disabled = true;
+            } catch (error) {
+                console.error('Error borrowing:', error);
+                showNotification('Borrow failed', 'error');
+            }
+        }
+
+        async function repay() {
+            if (!userAddress) {
+                showNotification('Please connect your wallet first', 'error');
+                return;
+            }
+
+            const amount = document.getElementById('repayAmount').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showNotification('Please enter a valid amount', 'error');
+                return;
+            }
+
+            try {
+                const amountWei = web3.utils.toWei(amount, 'ether');
+                const currentDebt = parseFloat(web3.utils.fromWei(currentPosition.debtAmount, 'ether'));
+                
+                if (parseFloat(amount) > currentDebt) {
+                    showNotification(`Amount exceeds current debt (${currentDebt.toFixed(2)} DEBT)`, 'error');
+                    return;
+                }
+
+                // In production, call actual contract
+                // await contracts.debtToken.methods.approve(CONTRACT_ADDRESSES.engine, amountWei).send({ from: userAddress });
+                // await contracts.engine.methods.repay(amountWei).send({ from: userAddress });
+
+                // Mock transaction
+                currentPosition.debtAmount = web3.utils.toBN(currentPosition.debtAmount).sub(web3.utils.toBN(amountWei)).toString();
+                
+                showNotification('Repayment successful!', 'success');
+                updateDashboard();
+                updateBalances();
+                
+                document.getElementById('repayAmount').value = '';
+            } catch (error) {
+                console.error('Error repaying:', error);
+                showNotification('Repayment failed', 'error');
+            }
+        }
+
+        async function withdraw() {
+            if (!userAddress) {
+                showNotification('Please connect your wallet first', 'error');
+                return;
+            }
+
+            const amount = document.getElementById('withdrawAmount').value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showNotification('Please enter a valid amount', 'error');
+                return;
+            }
+
+            try {
+                const amountWei = web3.utils.toWei(amount, 'ether');
+                const currentCollateral = parseFloat(web3.utils.fromWei(currentPosition.collateralAmount, 'ether'));
+                
+                if (parseFloat(amount) > currentCollateral) {
+                    showNotification(`Amount exceeds current collateral (${currentCollateral.toFixed(2)} COLL)`, 'error');
+                    return;
+                }
+
+                // In production, call actual contract
+                // await contracts.engine.methods.withdraw(amountWei).send({ from: userAddress });
+
+                // Mock transaction
+                currentPosition.collateralAmount = web3.utils.toBN(currentPosition.collateralAmount).sub(web3.utils.toBN(amountWei)).toString();
+                
+                showNotification('Withdrawal successful!', 'success');
+                updateDashboard();
+                updateBalances();
+                
+                document.getElementById('withdrawAmount').value = '';
+            } catch (error) {
+                console.error('Error withdrawing:', error);
+                showNotification('Withdrawal failed', 'error');
+            }
+        }
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Handle account changes
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                if (accounts.length > 0) {
+                    userAddress = accounts[0];
+                    updateWalletUI();
+                    loadPositionData();
+                } else {
+                    // Handle disconnect
+                    userAddress = null;
+                    document.getElementById('connectBtn').classList.remove('hidden');
+                    document.getElementById('walletAddress').classList.add('hidden');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
