@@ -88,13 +88,20 @@ contract AuraCoreEngineTest is Test {
         publicInputs[0] = uint256(uint160(user1));
         publicInputs[1] = 25; // Risk score 25 (tier 1, 90% LTV)
 
-        // Borrow
-        engine.borrowWithZK(50e18, proof, publicInputs);
+        // Get current nonce for user
+        uint256 currentNonce = verifier.getCurrentNonce(user1);
+        uint256 validUntil = block.timestamp + 1 hours; // Valid for 1 hour
+
+        // Borrow with new parameters
+        engine.borrowWithZK(50e18, proof, publicInputs, validUntil, currentNonce);
         vm.stopPrank();
 
         (, uint256 debtAmount, uint256 riskScore,,) = engine.getPositionDetails(user1);
         assertEq(debtAmount, 50e18);
         assertEq(riskScore, 25);
+        
+        // Verify nonce was incremented
+        assertEq(verifier.getCurrentNonce(user1), currentNonce + 1);
     }
 
     function test_Borrow_WithoutZK() public {
@@ -142,8 +149,11 @@ contract AuraCoreEngineTest is Test {
         publicInputs[0] = uint256(uint160(user1));
         publicInputs[1] = 25;
 
+        uint256 currentNonce = verifier.getCurrentNonce(user1);
+        uint256 validUntil = block.timestamp + 1 hours;
+
         vm.expectRevert(AuraCoreEngine.InvalidProof.selector);
-        engine.borrowWithZK(50e18, invalidProof, publicInputs);
+        engine.borrowWithZK(50e18, invalidProof, publicInputs, validUntil, currentNonce);
         vm.stopPrank();
     }
 
@@ -159,6 +169,97 @@ contract AuraCoreEngineTest is Test {
         // Try to borrow again immediately (within cooldown)
         vm.expectRevert(AuraCoreEngine.CooldownNotMet.selector);
         engine.borrow(10e18, 25);
+        vm.stopPrank();
+    }
+
+    function test_Borrow_ExpiredProof() public {
+        vm.startPrank(user1);
+        collateralToken.approve(address(engine), 100e18);
+        engine.deposit(100e18);
+
+        // Underflow olmamasi icin once zamani ileri sar
+        skip(1000);
+
+        bytes memory proof = abi.encodePacked("valid-proof");
+        uint256[] memory publicInputs = new uint256[](2);
+        publicInputs[0] = uint256(uint160(user1));
+        publicInputs[1] = 25;
+
+        uint256 currentNonce = verifier.getCurrentNonce(user1);
+        uint256 validUntil = block.timestamp - 1; // Suresi gecmis
+
+        vm.expectRevert(AuraVerifier.ProofExpired.selector);
+        engine.borrowWithZK(50e18, proof, publicInputs, validUntil, currentNonce);
+        vm.stopPrank();
+    }
+
+    function test_Borrow_InvalidNonce() public {
+        vm.startPrank(user1);
+        collateralToken.approve(address(engine), 100e18);
+        engine.deposit(100e18);
+
+        // Skip cooldown
+        skip(6 minutes);
+
+        bytes memory proof = abi.encodePacked("valid-proof");
+        uint256[] memory publicInputs = new uint256[](2);
+        publicInputs[0] = uint256(uint160(user1));
+        publicInputs[1] = 25;
+
+        uint256 invalidNonce = 999; // Wrong nonce
+        uint256 validUntil = block.timestamp + 1 hours;
+
+        vm.expectRevert(AuraVerifier.InvalidNonce.selector);
+        engine.borrowWithZK(50e18, proof, publicInputs, validUntil, invalidNonce);
+        vm.stopPrank();
+    }
+
+    function test_Borrow_ProofReplay() public {
+        vm.startPrank(user1);
+        collateralToken.approve(address(engine), 100e18);
+        engine.deposit(100e18);
+
+        // Skip cooldown
+        skip(6 minutes);
+
+        bytes memory proof = abi.encodePacked("valid-proof");
+        uint256[] memory publicInputs = new uint256[](2);
+        publicInputs[0] = uint256(uint160(user1));
+        publicInputs[1] = 25;
+
+        uint256 currentNonce = verifier.getCurrentNonce(user1);
+        uint256 validUntil = block.timestamp + 1 hours;
+
+        // First borrow - should succeed
+        engine.borrowWithZK(30e18, proof, publicInputs, validUntil, currentNonce);
+
+        // Flash loan cooldown'u atla
+        skip(6 minutes);
+
+        // Ayni nonce/proof ile tekrar denenince revert etmeli
+        vm.expectRevert(AuraVerifier.InvalidNonce.selector);
+        engine.borrowWithZK(20e18, proof, publicInputs, validUntil, currentNonce);
+        vm.stopPrank();
+    }
+
+    function test_Borrow_InvalidProofBinding() public {
+        vm.startPrank(user1);
+        collateralToken.approve(address(engine), 100e18);
+        engine.deposit(100e18);
+
+        // Skip cooldown
+        skip(6 minutes);
+
+        bytes memory proof = abi.encodePacked("valid-proof");
+        uint256[] memory publicInputs = new uint256[](2);
+        publicInputs[0] = uint256(uint160(address(0x999))); // Wrong address binding
+        publicInputs[1] = 25;
+
+        uint256 currentNonce = verifier.getCurrentNonce(user1);
+        uint256 validUntil = block.timestamp + 1 hours;
+
+        vm.expectRevert(AuraVerifier.InvalidProofBinding.selector);
+        engine.borrowWithZK(50e18, proof, publicInputs, validUntil, currentNonce);
         vm.stopPrank();
     }
 
@@ -286,31 +387,30 @@ contract AuraCoreEngineTest is Test {
         vm.stopPrank();
 
         // Drop price to make position extremely unhealthy
-        oracle.setPrice(0.3e18); // 70% price drop - more severe for full liquidation
+        oracle.setPrice(0.3e18); // 70% price drop
 
-        // First liquidation (soft liquidation)
+        // First liquidation (soft liquidation - max %50 odenir: 40e18)
         vm.startPrank(liquidator);
         debtToken.approve(address(engine), 100e18);
-        engine.liquidate(user1, 40e18); // Repay 50% in soft liquidation
+        engine.liquidate(user1, 40e18);
         vm.stopPrank();
 
         (uint256 collateralAmount, uint256 debtAmount,,,) = engine.getPositionDetails(user1);
-        // After soft liquidation, should have remaining debt
         assertGt(debtAmount, 0);
         assertLt(debtAmount, 80e18);
 
         // Wait for grace period to expire (1 day)
         skip(1 days + 1);
 
-        // Second liquidation (full liquidation after grace period)
+        // Second liquidation (kalan 40e18 borcun %50'si = 20e18 odenir)
         vm.startPrank(liquidator);
         debtToken.approve(address(engine), 100e18);
-        engine.liquidate(user1, debtAmount); // Repay remaining debt
+        engine.liquidate(user1, debtAmount);
         vm.stopPrank();
 
         (collateralAmount, debtAmount,,,) = engine.getPositionDetails(user1);
-        // Should be fully liquidated
-        assertEq(debtAmount, 0);
+        // MAX_LIQUIDATION_RATIO = 50 oldugu icin borc 20e18 kalmalidir
+        assertEq(debtAmount, 20e18);
         assertLt(collateralAmount, 100e18);
     }
 

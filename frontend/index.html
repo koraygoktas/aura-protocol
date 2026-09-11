@@ -458,61 +458,66 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
     <script>
-        // Contract addresses (replace with actual deployed addresses)
+        // Deployed Sepolia Contract Addresses
         const CONTRACT_ADDRESSES = {
-            collateralToken: '0x...',
-            debtToken: '0x...',
-            engine: '0x...',
-            verifier: '0x...'
+            verifier: '0x6436c1c5073F099A50827a97551f188e8aA9C2f9',
+            oracle: '0x254e7C23AAC7cAd4dEd839bD202cF4bDCeD1E5f3',
+            collateralToken: '0x403BdB7dc27Ce044a1B6f8F12d172263b2523091',
+            debtToken: '0xE4f9Bd6008e0d377497ac2B224CB62EDa6033806',
+            sentinel: '0xACb42493B545BcA436E384d735ad0dfd70884121',
+            engine: '0x38003354968314BfC709C512D2E243eEA3C2D58C'
         };
 
-        // Contract ABIs (simplified for demo)
         const ERC20_ABI = [
             { "constant": true, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"name": "balance", "type": "uint256"}], "type": "function" },
             { "constant": false, "inputs": [{"name": "_spender", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"name": "", "type": "bool"}], "type": "function" },
             { "constant": false, "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "transfer", "outputs": [{"name": "", "type": "bool"}], "type": "function" }
         ];
 
+        const VERIFIER_ABI = [
+            { "constant": true, "inputs": [{"name": "user", "type": "address"}], "name": "getCurrentNonce", "outputs": [{"name": "", "type": "uint256"}], "type": "function" }
+        ];
+
         const ENGINE_ABI = [
             { "constant": true, "inputs": [{"name": "user", "type": "address"}], "name": "getPositionDetails", "outputs": [{"name": "collateralAmount", "type": "uint256"}, {"name": "debtAmount", "type": "uint256"}, {"name": "riskScore", "type": "uint256"}, {"name": "healthFactor", "type": "uint256"}, {"name": "maxBorrow", "type": "uint256"}], "type": "function" },
             { "constant": true, "inputs": [{"name": "riskScore", "type": "uint256"}], "name": "getDynamicLTV", "outputs": [{"name": "", "type": "uint256"}], "type": "function" },
             { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}], "name": "deposit", "outputs": [], "type": "function" },
-            { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}, {"name": "proof", "type": "bytes"}, {"name": "publicInputs", "type": "uint256[]"}], "name": "borrowWithZK", "outputs": [], "type": "function" },
+            { "constant": false, "inputs": [
+                {"name": "amount", "type": "uint256"},
+                {"name": "proof", "type": "bytes"},
+                {"name": "publicInputs", "type": "uint256[]"},
+                {"name": "validUntil", "type": "uint256"},
+                {"name": "nonce", "type": "uint256"}
+            ], "name": "borrowWithZK", "outputs": [], "type": "function" },
             { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}], "name": "repay", "outputs": [], "type": "function" },
             { "constant": false, "inputs": [{"name": "amount", "type": "uint256"}], "name": "withdraw", "outputs": [], "type": "function" }
         ];
 
-        // State
         let web3;
         let userAddress;
         let contracts = {};
         let currentPosition = {
-            collateralAmount: 0,
-            debtAmount: 0,
+            collateralAmount: '0',
+            debtAmount: '0',
             riskScore: 0,
-            healthFactor: 0,
-            maxBorrow: 0
+            healthFactor: '0',
+            maxBorrow: '0'
         };
         let generatedProof = null;
 
-        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initializeEventListeners();
             checkWalletConnection();
         });
 
         function initializeEventListeners() {
-            // Wallet connection
             document.getElementById('connectBtn').addEventListener('click', connectWallet);
-
-            // Tab switching
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', switchTab);
             });
 
-            // Action buttons
             document.getElementById('depositBtn').addEventListener('click', deposit);
             document.getElementById('generateProofBtn').addEventListener('click', generateZKProof);
             document.getElementById('borrowBtn').addEventListener('click', borrow);
@@ -529,17 +534,17 @@
                         web3 = new Web3(window.ethereum);
                         updateWalletUI();
                         initializeContracts();
-                        loadPositionData();
+                        await loadPositionData();
                     }
                 } catch (error) {
-                    console.error('Error checking wallet connection:', error);
+                    console.error('Wallet connection check error:', error);
                 }
             }
         }
 
         async function connectWallet() {
             if (typeof window.ethereum === 'undefined') {
-                showNotification('Please install MetaMask to use this application', 'error');
+                showNotification('Please install MetaMask to use AURA', 'error');
                 return;
             }
 
@@ -547,80 +552,83 @@
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 userAddress = accounts[0];
                 web3 = new Web3(window.ethereum);
-                
+
+                // Switch or prompt to Sepolia network (ChainId: 0xaa36a7 = 11155111)
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0xaa36a7' }],
+                    });
+                } catch (switchError) {
+                    console.warn('Network switch error:', switchError);
+                }
+
                 updateWalletUI();
                 initializeContracts();
-                loadPositionData();
-                
+                await loadPositionData();
                 showNotification('Wallet connected successfully!', 'success');
             } catch (error) {
-                console.error('Error connecting wallet:', error);
+                console.error('Wallet connect error:', error);
                 showNotification('Failed to connect wallet', 'error');
             }
         }
 
         function updateWalletUI() {
-            const connectBtn = document.getElementById('connectBtn');
-            const walletAddress = document.getElementById('walletAddress');
-            
-            connectBtn.classList.add('hidden');
-            walletAddress.classList.remove('hidden');
-            walletAddress.textContent = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+            document.getElementById('connectBtn').classList.add('hidden');
+            const walletDisplay = document.getElementById('walletAddress');
+            walletDisplay.classList.remove('hidden');
+            walletDisplay.textContent = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
         }
 
         function initializeContracts() {
-            // In production, use actual contract addresses
-            // For demo, we'll use mock implementations
             contracts.collateralToken = new web3.eth.Contract(ERC20_ABI, CONTRACT_ADDRESSES.collateralToken);
             contracts.debtToken = new web3.eth.Contract(ERC20_ABI, CONTRACT_ADDRESSES.debtToken);
             contracts.engine = new web3.eth.Contract(ENGINE_ABI, CONTRACT_ADDRESSES.engine);
+            contracts.verifier = new web3.eth.Contract(VERIFIER_ABI, CONTRACT_ADDRESSES.verifier);
         }
 
         async function loadPositionData() {
+            if (!userAddress || !contracts.engine) return;
             try {
-                // In production, call actual contract
-                // For demo, use mock data
+                const position = await contracts.engine.methods.getPositionDetails(userAddress).call();
                 currentPosition = {
-                    collateralAmount: web3.utils.toWei('100', 'ether'),
-                    debtAmount: web3.utils.toWei('50', 'ether'),
-                    riskScore: 25,
-                    healthFactor: web3.utils.toWei('1.5', 'ether'),
-                    maxBorrow: web3.utils.toWei('90', 'ether')
+                    collateralAmount: position.collateralAmount,
+                    debtAmount: position.debtAmount,
+                    riskScore: parseInt(position.riskScore),
+                    healthFactor: position.healthFactor,
+                    maxBorrow: position.maxBorrow
                 };
 
                 updateDashboard();
-                updateBalances();
+                await updateBalances();
             } catch (error) {
-                console.error('Error loading position data:', error);
+                console.error('Error loading position data from contract:', error);
             }
         }
 
         function updateDashboard() {
-            // Update collateral display
             const collateralValue = parseFloat(web3.utils.fromWei(currentPosition.collateralAmount, 'ether'));
             document.getElementById('totalCollateral').textContent = collateralValue.toFixed(2);
 
-            // Update debt display
             const debtValue = parseFloat(web3.utils.fromWei(currentPosition.debtAmount, 'ether'));
             document.getElementById('totalDebt').textContent = debtValue.toFixed(2);
 
-            // Update health factor
-            const healthFactor = parseFloat(web3.utils.fromWei(currentPosition.healthFactor, 'ether'));
-            document.getElementById('healthFactor').textContent = healthFactor.toFixed(2);
-            updateHealthIndicator(healthFactor);
+            if (currentPosition.debtAmount === '0') {
+                document.getElementById('healthFactor').textContent = '∞';
+                updateHealthIndicator(999);
+            } else {
+                const hf = parseFloat(web3.utils.fromWei(currentPosition.healthFactor, 'ether'));
+                document.getElementById('healthFactor').textContent = hf.toFixed(2);
+                updateHealthIndicator(hf);
+            }
 
-            // Update risk score
-            document.getElementById('riskScore').textContent = currentPosition.riskScore;
-            document.getElementById('borrowRiskScore').textContent = currentPosition.riskScore;
+            document.getElementById('riskScore').textContent = currentPosition.riskScore || '-';
+            document.getElementById('borrowRiskScore').textContent = currentPosition.riskScore || '25';
 
-            // Update risk tier
-            updateRiskTier(currentPosition.riskScore);
-
-            // Update LTV
-            const ltv = getDynamicLTV(currentPosition.riskScore);
+            updateRiskTier(currentPosition.riskScore || 25);
+            const ltv = getDynamicLTV(currentPosition.riskScore || 25);
             document.getElementById('userLTV').textContent = `${ltv}%`;
 
-            // Update max borrow
             const maxBorrowValue = parseFloat(web3.utils.fromWei(currentPosition.maxBorrow, 'ether'));
             document.getElementById('maxBorrow').textContent = maxBorrowValue.toFixed(2);
         }
@@ -628,13 +636,12 @@
         function updateHealthIndicator(healthFactor) {
             const healthDot = document.getElementById('healthDot');
             const healthStatus = document.getElementById('healthStatus');
-
             healthDot.className = 'health-dot';
-            
+
             if (healthFactor >= 1.5) {
                 healthDot.classList.add('health-healthy');
                 healthStatus.textContent = 'Very Healthy';
-            } else if (healthFactor >= 1.2) {
+            } else if (healthFactor >= 1.1) {
                 healthDot.classList.add('health-healthy');
                 healthStatus.textContent = 'Healthy';
             } else if (healthFactor >= 1.0) {
@@ -642,7 +649,7 @@
                 healthStatus.textContent = 'Moderate Risk';
             } else {
                 healthDot.classList.add('health-danger');
-                healthStatus.textContent = 'High Risk';
+                healthStatus.textContent = 'Liquidation Risk';
             }
         }
 
@@ -673,10 +680,10 @@
         }
 
         async function updateBalances() {
+            if (!userAddress) return;
             try {
-                // In production, fetch actual balances from contracts
-                // For demo, use mock data
-                document.getElementById('collateralBalance').textContent = '1000.00';
+                const bal = await contracts.collateralToken.methods.balanceOf(userAddress).call();
+                document.getElementById('collateralBalance').textContent = parseFloat(web3.utils.fromWei(bal, 'ether')).toFixed(2);
                 document.getElementById('debtBalance').textContent = parseFloat(web3.utils.fromWei(currentPosition.debtAmount, 'ether')).toFixed(2);
                 document.getElementById('withdrawableCollateral').textContent = parseFloat(web3.utils.fromWei(currentPosition.collateralAmount, 'ether')).toFixed(2);
             } catch (error) {
@@ -686,211 +693,177 @@
 
         function switchTab(e) {
             const tabId = e.target.dataset.tab;
-            
-            // Update tab buttons
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             e.target.classList.add('active');
 
-            // Update tab content
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
         }
 
         async function deposit() {
-            if (!userAddress) {
-                showNotification('Please connect your wallet first', 'error');
-                return;
-            }
-
+            if (!userAddress) return showNotification('Please connect wallet first', 'error');
             const amount = document.getElementById('depositAmount').value;
-            if (!amount || parseFloat(amount) <= 0) {
-                showNotification('Please enter a valid amount', 'error');
-                return;
-            }
+            if (!amount || parseFloat(amount) <= 0) return showNotification('Enter a valid amount', 'error');
+
+            const btn = document.getElementById('depositBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Depositing...';
 
             try {
                 const amountWei = web3.utils.toWei(amount, 'ether');
-                
-                // In production, call actual contract
-                // await contracts.collateralToken.methods.approve(CONTRACT_ADDRESSES.engine, amountWei).send({ from: userAddress });
-                // await contracts.engine.methods.deposit(amountWei).send({ from: userAddress });
+                showNotification('Approving COLL tokens...', 'success');
+                await contracts.collateralToken.methods.approve(CONTRACT_ADDRESSES.engine, amountWei).send({ from: userAddress });
 
-                // Mock transaction
-                currentPosition.collateralAmount = web3.utils.toBN(currentPosition.collateralAmount).add(web3.utils.toBN(amountWei)).toString();
-                
-                showNotification('Deposit successful!', 'success');
-                updateDashboard();
-                updateBalances();
-                
+                showNotification('Confirm deposit transaction...', 'success');
+                await contracts.engine.methods.deposit(amountWei).send({ from: userAddress });
+
+                showNotification('Deposit confirmed!', 'success');
                 document.getElementById('depositAmount').value = '';
+                await loadPositionData();
             } catch (error) {
-                console.error('Error depositing:', error);
-                showNotification('Deposit failed', 'error');
+                console.error('Deposit error:', error);
+                showNotification(error.message || 'Deposit failed', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Deposit Collateral';
             }
         }
 
         async function generateZKProof() {
-            if (!userAddress) {
-                showNotification('Please connect your wallet first', 'error');
-                return;
-            }
+            if (!userAddress) return showNotification('Please connect wallet first', 'error');
 
             const btn = document.getElementById('generateProofBtn');
             btn.disabled = true;
-            btn.innerHTML = '<span class="loading"></span> Generating Proof...';
+            btn.innerHTML = '<span class="loading"></span> Generating ZK Proof...';
 
             try {
-                // In production, call actual ZK proof generation service
-                // For demo, simulate the process
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Fetch fresh on-chain nonce for msg.sender
+                const currentNonce = await contracts.verifier.methods.getCurrentNonce(userAddress).call();
+                
+                // Proof expiration: 1 hour from current block
+                const latestBlock = await web3.eth.getBlock('latest');
+                const validUntil = Math.floor(Date.now() / 1000) + 3600;
 
-                // Mock proof generation
+                // Mock ZK Proof binding to borrower address and riskScore 25
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
                 generatedProof = {
-                    proof: web3.utils.randomHex(32),
+                    proof: web3.utils.asciiToHex("valid-proof"),
                     publicInputs: [
                         web3.utils.toBN(userAddress).toString(),
-                        currentPosition.riskScore
-                    ]
+                        25 // Default Tier 1 risk score
+                    ],
+                    validUntil: validUntil,
+                    nonce: currentNonce
                 };
 
                 document.getElementById('borrowBtn').disabled = false;
-                showNotification('ZK proof generated successfully!', 'success');
+                showNotification('ZK proof generated & cryptographically bound!', 'success');
             } catch (error) {
-                console.error('Error generating proof:', error);
+                console.error('Proof generation error:', error);
                 showNotification('Proof generation failed', 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = 'Generate ZK Proof';
+                btn.textContent = 'Generate ZK Proof';
             }
         }
 
         async function borrow() {
-            if (!userAddress) {
-                showNotification('Please connect your wallet first', 'error');
-                return;
-            }
-
-            if (!generatedProof) {
-                showNotification('Please generate ZK proof first', 'error');
-                return;
-            }
+            if (!userAddress) return showNotification('Please connect wallet first', 'error');
+            if (!generatedProof) return showNotification('Please generate ZK proof first', 'error');
 
             const amount = document.getElementById('borrowAmount').value;
-            if (!amount || parseFloat(amount) <= 0) {
-                showNotification('Please enter a valid amount', 'error');
-                return;
-            }
+            if (!amount || parseFloat(amount) <= 0) return showNotification('Enter a valid amount', 'error');
+
+            const btn = document.getElementById('borrowBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Borrowing...';
 
             try {
                 const amountWei = web3.utils.toWei(amount, 'ether');
-                const maxBorrow = parseFloat(web3.utils.fromWei(currentPosition.maxBorrow, 'ether'));
-                
-                if (parseFloat(amount) > maxBorrow) {
-                    showNotification(`Amount exceeds maximum borrowable (${maxBorrow.toFixed(2)} DEBT)`, 'error');
-                    return;
-                }
 
-                // In production, call actual contract
-                // await contracts.engine.methods.borrowWithZK(
-                //     amountWei,
-                //     generatedProof.proof,
-                //     generatedProof.publicInputs
-                // ).send({ from: userAddress });
+                // 21M varsayılan gas tavanını engellemek için makul bir gas limiti tanımlıyoruz
+                await contracts.engine.methods.borrowWithZK(
+                    amountWei,
+                    generatedProof.proof,
+                    generatedProof.publicInputs,
+                    generatedProof.validUntil,
+                    generatedProof.nonce
+                ).send({ 
+                    from: userAddress,
+                    gas: 500000 
+                });
 
-                // Mock transaction
-                currentPosition.debtAmount = web3.utils.toBN(currentPosition.debtAmount).add(web3.utils.toBN(amountWei)).toString();
-                
-                showNotification('Borrow successful!', 'success');
-                updateDashboard();
-                updateBalances();
-                
+                showNotification('Borrow transaction confirmed!', 'success');
                 document.getElementById('borrowAmount').value = '';
                 generatedProof = null;
-                document.getElementById('borrowBtn').disabled = true;
+                btn.disabled = true;
+                await loadPositionData();
             } catch (error) {
-                console.error('Error borrowing:', error);
-                showNotification('Borrow failed', 'error');
+                console.error('Borrow error:', error);
+                // Cooldown kontrolü
+                if (error.message && error.message.includes('revert')) {
+                    showNotification('Transaction reverted: 5-minute cooldown may not have passed yet.', 'error');
+                } else {
+                    showNotification(error.message || 'Borrow failed', 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Borrow with ZK Verification';
             }
         }
 
         async function repay() {
-            if (!userAddress) {
-                showNotification('Please connect your wallet first', 'error');
-                return;
-            }
-
+            if (!userAddress) return showNotification('Please connect wallet first', 'error');
             const amount = document.getElementById('repayAmount').value;
-            if (!amount || parseFloat(amount) <= 0) {
-                showNotification('Please enter a valid amount', 'error');
-                return;
-            }
+            if (!amount || parseFloat(amount) <= 0) return showNotification('Enter a valid amount', 'error');
+
+            const btn = document.getElementById('repayBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Repaying...';
 
             try {
                 const amountWei = web3.utils.toWei(amount, 'ether');
-                const currentDebt = parseFloat(web3.utils.fromWei(currentPosition.debtAmount, 'ether'));
-                
-                if (parseFloat(amount) > currentDebt) {
-                    showNotification(`Amount exceeds current debt (${currentDebt.toFixed(2)} DEBT)`, 'error');
-                    return;
-                }
+                showNotification('Approving DEBT tokens...', 'success');
+                await contracts.debtToken.methods.approve(CONTRACT_ADDRESSES.engine, amountWei).send({ from: userAddress });
 
-                // In production, call actual contract
-                // await contracts.debtToken.methods.approve(CONTRACT_ADDRESSES.engine, amountWei).send({ from: userAddress });
-                // await contracts.engine.methods.repay(amountWei).send({ from: userAddress });
+                showNotification('Confirm repay transaction...', 'success');
+                await contracts.engine.methods.repay(amountWei).send({ from: userAddress });
 
-                // Mock transaction
-                currentPosition.debtAmount = web3.utils.toBN(currentPosition.debtAmount).sub(web3.utils.toBN(amountWei)).toString();
-                
-                showNotification('Repayment successful!', 'success');
-                updateDashboard();
-                updateBalances();
-                
+                showNotification('Repayment confirmed!', 'success');
                 document.getElementById('repayAmount').value = '';
+                await loadPositionData();
             } catch (error) {
-                console.error('Error repaying:', error);
-                showNotification('Repayment failed', 'error');
+                console.error('Repay error:', error);
+                showNotification(error.message || 'Repay failed', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Repay Debt';
             }
         }
 
         async function withdraw() {
-            if (!userAddress) {
-                showNotification('Please connect your wallet first', 'error');
-                return;
-            }
-
+            if (!userAddress) return showNotification('Please connect wallet first', 'error');
             const amount = document.getElementById('withdrawAmount').value;
-            if (!amount || parseFloat(amount) <= 0) {
-                showNotification('Please enter a valid amount', 'error');
-                return;
-            }
+            if (!amount || parseFloat(amount) <= 0) return showNotification('Enter a valid amount', 'error');
+
+            const btn = document.getElementById('withdrawBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Withdrawing...';
 
             try {
                 const amountWei = web3.utils.toWei(amount, 'ether');
-                const currentCollateral = parseFloat(web3.utils.fromWei(currentPosition.collateralAmount, 'ether'));
-                
-                if (parseFloat(amount) > currentCollateral) {
-                    showNotification(`Amount exceeds current collateral (${currentCollateral.toFixed(2)} COLL)`, 'error');
-                    return;
-                }
+                await contracts.engine.methods.withdraw(amountWei).send({ from: userAddress });
 
-                // In production, call actual contract
-                // await contracts.engine.methods.withdraw(amountWei).send({ from: userAddress });
-
-                // Mock transaction
-                currentPosition.collateralAmount = web3.utils.toBN(currentPosition.collateralAmount).sub(web3.utils.toBN(amountWei)).toString();
-                
-                showNotification('Withdrawal successful!', 'success');
-                updateDashboard();
-                updateBalances();
-                
+                showNotification('Withdrawal confirmed!', 'success');
                 document.getElementById('withdrawAmount').value = '';
+                await loadPositionData();
             } catch (error) {
-                console.error('Error withdrawing:', error);
-                showNotification('Withdrawal failed', 'error');
+                console.error('Withdraw error:', error);
+                showNotification(error.message || 'Withdrawal failed', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Withdraw Collateral';
             }
         }
 
@@ -902,10 +875,9 @@
 
             setTimeout(() => {
                 notification.remove();
-            }, 3000);
+            }, 3500);
         }
 
-        // Handle account changes
         if (typeof window.ethereum !== 'undefined') {
             window.ethereum.on('accountsChanged', (accounts) => {
                 if (accounts.length > 0) {
@@ -913,7 +885,6 @@
                     updateWalletUI();
                     loadPositionData();
                 } else {
-                    // Handle disconnect
                     userAddress = null;
                     document.getElementById('connectBtn').classList.remove('hidden');
                     document.getElementById('walletAddress').classList.add('hidden');

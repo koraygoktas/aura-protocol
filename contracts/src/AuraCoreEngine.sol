@@ -50,6 +50,8 @@ contract AuraCoreEngine {
     // protocol parameters
     uint256 public constant TARGET_RATIO = 110; // 110% (1.1x) for health factor calculations
     uint256 public constant LIQUIDATION_BONUS = 10; // 10% bonus for liquidators
+    uint256 public constant PROOF_VALIDITY_PERIOD = 1 hours; // ZK proofs valid for 1 hour
+    uint256 public constant MAX_LIQUIDATION_RATIO = 50; // Max 50% debt can be liquidated at once
 
     // events
     event Deposited(address indexed user, uint256 amount);
@@ -68,6 +70,10 @@ contract AuraCoreEngine {
     error InsufficientBalance();
     error ZeroAmount();
     error SameBlockAction();
+    error ProofExpired();
+    error InvalidNonce();
+    error ProofAlreadyUsed();
+    error InvalidProofBinding();
 
     modifier onlyPositiveAmount(uint256 amount) {
         if (amount == 0) revert ZeroAmount();
@@ -150,24 +156,29 @@ contract AuraCoreEngine {
     }
 
     /**
-     * @notice Borrow with ZK proof verification.
+     * @notice Borrow with ZK proof verification with replay and expiration protection.
      * @param amount Amount to borrow.
      * @param proof ZK-SNARK proof.
      * @param publicInputs Public inputs [borrowerAddress, riskScore].
+     * @param validUntil Timestamp until which the proof is valid.
+     * @param nonce Unique nonce for the user to prevent replay attacks.
      */
     function borrowWithZK(
         uint256 amount,
         bytes calldata proof,
-        uint256[] calldata publicInputs
+        uint256[] calldata publicInputs,
+        uint256 validUntil,
+        uint256 nonce
     ) external onlyPositiveAmount(amount) {
-        // verify ZK proof
-        if (!verifier.verifyProof(proof, publicInputs)) {
+        // verify ZK proof with replay and expiration protection
+        // The verifier will revert with specific errors if validation fails
+        bool proofValid = verifier.verifyProof(msg.sender, proof, publicInputs, validUntil, nonce);
+        if (!proofValid) {
             revert InvalidProof();
         }
 
         // verify public inputs
         if (publicInputs.length < 2) revert InvalidProof();
-        if (address(uint160(publicInputs[0])) != msg.sender) revert InvalidProof();
         
         uint256 riskScore = publicInputs[1];
         if (riskScore > 100) revert InvalidRiskScore();
@@ -294,7 +305,7 @@ contract AuraCoreEngine {
     }
 
     /**
-     * @notice Liquidate an unhealthy position.
+     * @notice Liquidate an unhealthy position with proper liquidation bonus.
      * @param user User to liquidate.
      * @param debtToRepay Amount of debt to repay.
      */
@@ -307,6 +318,12 @@ contract AuraCoreEngine {
         uint256 healthFactor = getHealthFactor(user);
         if (healthFactor >= 1e18) revert PositionHealthy();
 
+        // enforce max liquidation ratio (cannot liquidate more than MAX_LIQUIDATION_RATIO at once)
+        uint256 maxLiquidatableDebt = (pos.debtAmount * MAX_LIQUIDATION_RATIO) / 100;
+        if (debtToRepay > maxLiquidatableDebt) {
+            debtToRepay = maxLiquidatableDebt;
+        }
+
         // process liquidation through sentinel
         uint256 targetRatio = TARGET_RATIO * 1e16;
         (uint256 actualDebtToRepay, uint256 collateralToSeize,) = 
@@ -318,7 +335,7 @@ contract AuraCoreEngine {
                 targetRatio
             );
 
-        // cap debt to repay
+        // cap debt to repay based on sentinel calculation
         if (debtToRepay > actualDebtToRepay) {
             debtToRepay = actualDebtToRepay;
         }
@@ -326,7 +343,7 @@ contract AuraCoreEngine {
             debtToRepay = pos.debtAmount;
         }
 
-        // recalculate collateral to seize based on actual debt repaid
+        // recalculate collateral to seize based on actual debt repaid with liquidation bonus
         collateralToSeize = (debtToRepay * (100 + LIQUIDATION_BONUS) * 1e16) / oracle.getPrice();
         if (collateralToSeize > pos.collateralAmount) {
             collateralToSeize = pos.collateralAmount;
@@ -368,5 +385,38 @@ contract AuraCoreEngine {
         riskScore = pos.riskScore;
         healthFactor = getHealthFactor(user);
         maxBorrow = getMaxBorrowAmount(collateralAmount, riskScore);
+    }
+
+    /**
+     * @notice Get current nonce for a user for ZK proof generation.
+     * @param user User address.
+     * @return Current nonce value for the user.
+     */
+    function getCurrentNonce(address user) external view returns (uint256) {
+        return verifier.getCurrentNonce(user);
+    }
+
+    /**
+     * @notice Get protocol constants for frontend integration.
+     * @return proofValidityPeriod ZK proof validity period in seconds.
+     * @return maxLiquidationRatio Maximum liquidation ratio percentage.
+     * @return liquidationBonus Liquidation bonus percentage.
+     * @return borrowCooldown Borrow cooldown period in seconds.
+     * @return actionCooldown General action cooldown period in seconds.
+     */
+    function getProtocolConstants() external pure returns (
+        uint256 proofValidityPeriod,
+        uint256 maxLiquidationRatio,
+        uint256 liquidationBonus,
+        uint256 borrowCooldown,
+        uint256 actionCooldown
+    ) {
+        return (
+            PROOF_VALIDITY_PERIOD,
+            MAX_LIQUIDATION_RATIO,
+            LIQUIDATION_BONUS,
+            BORROW_COOLDOWN,
+            ACTION_COOLDOWN
+        );
     }
 }
